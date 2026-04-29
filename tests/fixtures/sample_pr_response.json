@@ -1,0 +1,20 @@
+{
+  "id": "42",
+  "title": "Fix SQL injection in auth module",
+  "description": "Replaces f-string query with parameterized query and hashes password before comparison.",
+  "author": "octocat",
+  "source_branch": "fix/sql-injection",
+  "target_branch": "main",
+  "provider": "github",
+  "url": "https://github.com/example/repo/pull/42",
+  "files": [
+    {
+      "path": "src/auth.py",
+      "status": "modified",
+      "additions": 3,
+      "deletions": 2,
+      "diff_text": "diff --git a/src/auth.py b/src/auth.py\n...",
+      "language": "python"
+    }
+  ]
+}

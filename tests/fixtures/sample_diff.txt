@@ -1,0 +1,14 @@
+diff --git a/src/auth.py b/src/auth.py
+index abc1234..def5678 100644
+--- a/src/auth.py
++++ b/src/auth.py
+@@ -10,8 +10,12 @@
+ import hashlib
+
+ def authenticate_user(username: str, password: str) -> bool:
+-    query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
+-    result = db.execute(query)
++    query = "SELECT * FROM users WHERE username=? AND password=?"
++    hashed = hashlib.sha256(password.encode()).hexdigest()
++    result = db.execute(query, (username, hashed))
+     return result is not None
