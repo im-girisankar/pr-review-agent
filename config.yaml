@@ -1,0 +1,15 @@
+analysis:
+  parallel: true
+  max_diff_size_kb: 500
+
+llm:
+  temperature: 0.2
+  max_tokens: 2000
+  retry_attempts: 2
+
+synthesis:
+  enable_self_critique: true
+  min_severity_to_report: low
+
+output:
+  default_format: markdown
