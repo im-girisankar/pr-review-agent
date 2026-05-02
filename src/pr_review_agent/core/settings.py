@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     # LLM providers
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
 
     # Defaults

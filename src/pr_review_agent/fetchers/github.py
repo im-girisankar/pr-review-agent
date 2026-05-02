@@ -18,7 +18,8 @@ class GitHubFetcher(PRFetcher):
     """Fetches PR data from GitHub using PyGithub."""
 
     def __init__(self, pat: str) -> None:
-        self._client = Github(pat)
+        # Empty PAT → anonymous access (works for public repos, 60 req/hr limit)
+        self._client = Github(pat) if pat else Github()
 
     def fetch_pr(self, pr_identifier: str) -> PullRequest:
         owner, repo_name, pr_number = parse_github_pr_url(pr_identifier)

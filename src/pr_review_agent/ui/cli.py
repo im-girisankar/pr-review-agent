@@ -69,7 +69,7 @@ def main() -> None:
     "llm_provider",
     default="ollama",
     show_default=True,
-    type=click.Choice(["openai", "anthropic", "ollama"]),
+    type=click.Choice(["openai", "anthropic", "groq", "ollama"]),
     help="LLM backend.",
 )
 @click.option("--model", default=None, help="Model name (overrides config default).")

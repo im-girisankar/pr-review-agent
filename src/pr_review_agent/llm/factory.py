@@ -2,6 +2,7 @@ from pr_review_agent.core.settings import Settings
 
 from .anthropic_provider import AnthropicProvider
 from .base import LLMProvider
+from .groq_provider import GroqProvider
 from .ollama_provider import OllamaProvider
 from .openai_provider import OpenAIProvider
 
@@ -20,6 +21,13 @@ def get_llm(provider: str, settings: Settings, model_override: str | None = None
                 api_key=settings.anthropic_api_key,
                 model=model_override or settings.default_model,
                 max_tokens=settings.max_tokens,
+            )
+        case "groq":
+            return GroqProvider(
+                api_key=settings.groq_api_key,
+                model=model_override or "llama-3.3-70b-versatile",
+                max_tokens=settings.max_tokens,
+                retry_attempts=settings.retry_attempts,
             )
         case "ollama":
             return OllamaProvider(
