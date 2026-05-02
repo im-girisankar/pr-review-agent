@@ -51,7 +51,7 @@ def main():
     with st.sidebar:
         st.header("Configuration")
         provider = st.selectbox("PR Source", ["github", "azure_devops"])
-        llm_provider = st.selectbox("LLM Backend", ["ollama", "openai", "anthropic"])
+        llm_provider = st.selectbox("LLM Backend", ["groq", "ollama", "openai", "anthropic"])
         model = st.text_input(
             "Model",
             placeholder="llama3.1:8b / gpt-4o / claude-sonnet-4-6",
