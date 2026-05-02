@@ -102,18 +102,6 @@ def _make_gh_pr(
 
 
 class TestGitHubFetcher:
-    @pytest.fixture
-    def fetcher(self):
-        with patch("pr_review_agent.fetchers.github.Github") as MockGithub:
-            instance = MockGithub.return_value
-            yield fetcher_instance := GitHubFetcher(pat="ghp_fake"), instance
-
-    def _setup_repo(self, gh_instance, gh_pr):
-        repo = MagicMock()
-        repo.get_pull.return_value = gh_pr
-        gh_instance.get_repo.return_value = repo
-        return repo
-
     def test_fetch_pr_returns_pull_request(self):
         with patch("pr_review_agent.fetchers.github.Github") as MockGithub:
             gh_pr = _make_gh_pr()

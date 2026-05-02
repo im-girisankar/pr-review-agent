@@ -7,25 +7,24 @@ from .openai_provider import OpenAIProvider
 
 
 def get_llm(provider: str, settings: Settings, model_override: str | None = None) -> LLMProvider:
-    model = model_override or settings.default_model
     match provider:
         case "openai":
             return OpenAIProvider(
                 api_key=settings.openai_api_key,
-                model=model,
+                model=model_override or settings.default_model,
                 max_tokens=settings.max_tokens,
                 retry_attempts=settings.retry_attempts,
             )
         case "anthropic":
             return AnthropicProvider(
                 api_key=settings.anthropic_api_key,
-                model=model,
+                model=model_override or settings.default_model,
                 max_tokens=settings.max_tokens,
             )
         case "ollama":
             return OllamaProvider(
                 base_url=settings.ollama_base_url,
-                model=model,
+                model=model_override or settings.default_model,
                 max_tokens=settings.max_tokens,
             )
         case _:
