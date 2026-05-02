@@ -1,8 +1,22 @@
 import asyncio
+import io
 import sys
 
 import click
 import structlog
+
+# Ensure stdout is UTF-8 on Windows (default cp1252 breaks emoji in markdown output)
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", line_buffering=True)
+
+# Send structured logs to stderr so they don't pollute piped/redirected output
+structlog.configure(
+    processors=[
+        structlog.stdlib.add_log_level,
+        structlog.dev.ConsoleRenderer(),
+    ],
+    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+)
 
 from pr_review_agent.core.graph import build_graph
 from pr_review_agent.core.settings import Settings
