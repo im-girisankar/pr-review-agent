@@ -1,6 +1,5 @@
 import structlog
 from github import Github, GithubException
-from github.PullRequest import PullRequest as GHPullRequest
 from github.File import File as GHFile
 
 from .base import PRFetcher
@@ -9,7 +8,10 @@ from .utils import detect_language, parse_github_pr_url
 
 log = structlog.get_logger(__name__)
 
-_MAX_DIFF_SIZE_BYTES = 500 * 1024  # 500 KB
+# GitHub hard-caps paginated file lists at 3000 files per PR.
+_GITHUB_MAX_FILES = 3000
+# Files whose diff text exceeds this are included but diff_text is truncated.
+_MAX_DIFF_BYTES = 500 * 1024  # 500 KB
 
 
 class GitHubFetcher(PRFetcher):
@@ -30,7 +32,27 @@ class GitHubFetcher(PRFetcher):
                 f"Failed to fetch PR {pr_identifier}: {exc.status} {exc.data}"
             ) from exc
 
-        files = [self._map_file(f) for f in gh_pr.get_files() if not self._is_binary(f)]
+        if gh_pr.changed_files >= _GITHUB_MAX_FILES:
+            log.warning(
+                "pr_at_github_file_cap",
+                pr=pr_number,
+                changed_files=gh_pr.changed_files,
+                cap=_GITHUB_MAX_FILES,
+            )
+
+        # get_files() returns a PaginatedList — PyGithub handles pagination automatically.
+        files = [
+            self._map_file(f)
+            for f in gh_pr.get_files()
+            if not self._is_binary(f)
+        ]
+
+        log.info(
+            "pr_fetched",
+            pr=pr_number,
+            total_files=gh_pr.changed_files,
+            text_files=len(files),
+        )
 
         return PullRequest(
             id=str(gh_pr.number),
@@ -45,7 +67,6 @@ class GitHubFetcher(PRFetcher):
         )
 
     def get_file_diff(self, pr: PullRequest, file_path: str) -> FileDiff:
-        """Return the FileDiff for a specific file already loaded in the PR."""
         for f in pr.files:
             if f.path == file_path:
                 return f
@@ -57,11 +78,14 @@ class GitHubFetcher(PRFetcher):
 
     def _map_file(self, gh_file: GHFile) -> FileDiff:
         status = gh_file.status
-        # PyGithub uses "renamed" as a status; normalise to our literal
         if status not in ("added", "modified", "deleted", "renamed"):
             status = "modified"
 
         diff_text = gh_file.patch or ""
+        if len(diff_text.encode()) > _MAX_DIFF_BYTES:
+            log.warning("diff_truncated", path=gh_file.filename)
+            diff_text = diff_text.encode()[:_MAX_DIFF_BYTES].decode("utf-8", errors="ignore")
+
         return FileDiff(
             path=gh_file.filename,
             status=status,  # type: ignore[arg-type]
@@ -73,5 +97,5 @@ class GitHubFetcher(PRFetcher):
 
     @staticmethod
     def _is_binary(gh_file: GHFile) -> bool:
-        """Skip binary files — patch is None and diff is meaningless."""
+        """Binary files have no patch — skip them as diffs are meaningless."""
         return gh_file.patch is None
