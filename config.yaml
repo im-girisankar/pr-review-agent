@@ -13,3 +13,7 @@ synthesis:
 
 output:
   default_format: markdown
+
+context:
+  # path: .pr-review-context.md   # or graphify-out/graph.json; omit to auto-discover
+  budget_tokens: 1500              # max tokens of context injected per analysis pass

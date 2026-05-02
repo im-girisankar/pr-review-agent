@@ -44,13 +44,16 @@ async def _self_critique(
     diff: str,
     llm: LLMProvider,
     settings: Settings,
+    project_context: str = "",
 ) -> list[Finding]:
     """Drop findings that the LLM cannot ground in the actual diff."""
     if not findings:
         return []
 
     findings_json = json.dumps([f.model_dump() for f in findings], indent=2)
-    system, user = synthesis_prompts.build_critique_prompt(findings_json, diff)
+    system, user = synthesis_prompts.build_critique_prompt(
+        findings_json, diff, project_context=project_context
+    )
 
     try:
         resp = await llm.acomplete(
@@ -76,6 +79,7 @@ async def _generate_summary(
     pr_title: str,
     llm: LLMProvider,
     settings: Settings,
+    project_context: str = "",
 ) -> str:
     if not findings:
         return "No significant issues found in this pull request."
@@ -86,6 +90,7 @@ async def _generate_summary(
         findings=findings,
         total=len(findings),
         critical_high=len(critical_high),
+        project_context=project_context,
     )
     try:
         resp = await llm.acomplete(system=system, user=user, temperature=0.3)
@@ -107,12 +112,19 @@ def make_synthesis_node(llm: LLMProvider, settings: Settings) -> Callable:
 
         log.info("synthesis_start", raw_findings=len(raw_findings))
 
+        ctx = state.get("project_context")
+        budget = settings.context_budget_tokens
+        critique_context = ctx.retrieve("synthesis_critique", budget) if ctx else ""
+        summary_context = ctx.retrieve("synthesis_summary", budget) if ctx else ""
+
         deduped = _deduplicate(raw_findings)
         log.info("synthesis_deduped", before=len(raw_findings), after=len(deduped))
 
         if settings.enable_self_critique and pr:
             diff = format_diff(pr)
-            verified = await _self_critique(deduped, diff, llm, settings)
+            verified = await _self_critique(
+                deduped, diff, llm, settings, project_context=critique_context
+            )
         else:
             verified = deduped
 
@@ -126,6 +138,7 @@ def make_synthesis_node(llm: LLMProvider, settings: Settings) -> Callable:
             pr_title=pr.title if pr else "Unknown PR",
             llm=llm,
             settings=settings,
+            project_context=summary_context,
         )
 
         log.info("synthesis_done", final_findings=len(final))

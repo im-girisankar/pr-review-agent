@@ -32,12 +32,16 @@ class Settings(BaseSettings):
     retry_attempts: int = 2
     enable_self_critique: bool = True
     default_format: str = "markdown"
+    project_context_path: Path | None = None
+    context_budget_tokens: int = 1500
 
     @classmethod
     def from_yaml(cls, yaml_path: Path = Path("config.yaml")) -> "Settings":
         overrides: dict = {}
         if yaml_path.exists():
             raw = yaml.safe_load(yaml_path.read_text())
+            ctx_cfg = raw.get("context", {}) or {}
+            ctx_path = ctx_cfg.get("path")
             overrides = {
                 "parallel": raw.get("analysis", {}).get("parallel", True),
                 "max_diff_size_kb": raw.get("analysis", {}).get("max_diff_size_kb", 500),
@@ -46,5 +50,7 @@ class Settings(BaseSettings):
                 "retry_attempts": raw.get("llm", {}).get("retry_attempts", 2),
                 "enable_self_critique": raw.get("synthesis", {}).get("enable_self_critique", True),
                 "default_format": raw.get("output", {}).get("default_format", "markdown"),
+                "context_budget_tokens": ctx_cfg.get("budget_tokens", 1500),
+                **({"project_context_path": Path(ctx_path)} if ctx_path else {}),
             }
         return cls(**overrides)

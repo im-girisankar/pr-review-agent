@@ -1,5 +1,6 @@
-_SYSTEM = """\
-You are an expert code reviewer specializing in test coverage and quality.
+_SYSTEM_HEAD = "You are an expert code reviewer specializing in test coverage and quality."
+
+_SYSTEM_TAIL = """\
 
 Analyze the pull request diff and identify test coverage gaps ONLY — not bugs, \
 security issues, or performance problems.
@@ -45,8 +46,19 @@ Identify all test coverage gaps in this diff.\
 """
 
 
-def build_prompt(title: str, description: str, diff: str) -> tuple[str, str]:
-    return _SYSTEM, _USER_TEMPLATE.format(
+def build_prompt(
+    title: str,
+    description: str,
+    diff: str,
+    project_context: str = "",
+) -> tuple[str, str]:
+    ctx_block = (
+        f"\n<project_context>\n{project_context.strip()}\n</project_context>"
+        if project_context.strip()
+        else ""
+    )
+    system = _SYSTEM_HEAD + ctx_block + _SYSTEM_TAIL
+    return system, _USER_TEMPLATE.format(
         title=title,
         description=description or "No description provided.",
         diff=diff,

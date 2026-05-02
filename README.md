@@ -106,6 +106,54 @@ synthesis:
   enable_self_critique: true
 ```
 
+## Project Context (optional)
+
+Teach the agent about your project so reviews reflect your conventions, architecture, and domain rules.
+
+### Option A — Plain markdown (simple)
+
+Create `.pr-review-context.md` in your repo root (auto-discovered) or pass it explicitly:
+
+```bash
+pr-review-agent review <url> --project-context .pr-review-context.md
+```
+
+See `examples/sample_project_context.md` for the recommended structure. Include sections like:
+- **Overview** — what the service does
+- **Conventions** — rules that override generic findings ("we use JWT, don't flag missing session checks")
+- **Review Instructions** — explicit priorities ("flag SQL concatenation as critical")
+
+### Option B — Knowledge graph (large projects)
+
+For bigger projects, build a knowledge graph once and get targeted per-pass retrieval (only the relevant slice of context is injected per analysis pass):
+
+```bash
+pip install pr-review-agent[context]   # installs graphifyy + networkx
+/graphify docs/                        # or: python -m graphify docs/
+# produces graphify-out/graph.json
+```
+
+Then pass the graph:
+```bash
+pr-review-agent review <url> --project-context graphify-out/graph.json
+```
+
+The agent runs a BFS query on the graph for each analysis pass using category-specific seed terms (e.g. "auth", "token", "permission" for the security pass), injecting only the relevant subgraph — bounded to ~1500 tokens by default.
+
+### Streamlit UI
+
+Upload your `.md` or `graph.json` via the **Project Context** file uploader in the sidebar before running a review.
+
+### Configuration
+
+Set a default path in `config.yaml` so you never need to pass the flag:
+
+```yaml
+context:
+  path: .pr-review-context.md   # or graphify-out/graph.json
+  budget_tokens: 1500           # max tokens injected per pass (lower for small models)
+```
+
 ## Project Structure
 
 ```

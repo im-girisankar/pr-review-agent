@@ -1,5 +1,6 @@
-_SYSTEM = """\
-You are an expert code reviewer specializing in security vulnerabilities.
+_SYSTEM_HEAD = "You are an expert code reviewer specializing in security vulnerabilities."
+
+_SYSTEM_TAIL = """\
 
 Analyze the pull request diff and identify security issues ONLY — not general \
 bugs, performance problems, or missing tests.
@@ -47,8 +48,19 @@ Identify all security vulnerabilities in this diff.\
 """
 
 
-def build_prompt(title: str, description: str, diff: str) -> tuple[str, str]:
-    return _SYSTEM, _USER_TEMPLATE.format(
+def build_prompt(
+    title: str,
+    description: str,
+    diff: str,
+    project_context: str = "",
+) -> tuple[str, str]:
+    ctx_block = (
+        f"\n<project_context>\n{project_context.strip()}\n</project_context>"
+        if project_context.strip()
+        else ""
+    )
+    system = _SYSTEM_HEAD + ctx_block + _SYSTEM_TAIL
+    return system, _USER_TEMPLATE.format(
         title=title,
         description=description or "No description provided.",
         diff=diff,

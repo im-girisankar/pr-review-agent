@@ -79,6 +79,7 @@ async def test_full_graph_with_mock_providers():
         default_provider="github", default_llm="ollama",
         default_model="llama3.1:8b",
         max_diff_size_kb=500, default_format="markdown",
+        context_budget_tokens=1500, project_context_path=None,
     )
 
     graph = build_graph(fetcher, llm, settings)
@@ -86,6 +87,7 @@ async def test_full_graph_with_mock_providers():
     initial_state = {
         "pr_url": "https://github.com/example/repo/pull/1",
         "provider": "github",
+        "project_context": None,
         "pull_request": None,
         "findings": [],
         "final_findings": None,
@@ -100,3 +102,90 @@ async def test_full_graph_with_mock_providers():
     assert len(review.findings) >= 1
     assert review.summary
     assert not review.errors
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_full_graph_with_project_context():
+    """Verifies that project context flows through to analysis and synthesis without errors."""
+    import json
+    from pathlib import Path
+    from unittest.mock import AsyncMock, MagicMock
+
+    from pr_review_agent.context.retriever import ProjectContext
+    from pr_review_agent.core.graph import build_graph
+    from pr_review_agent.core.settings import Settings
+    from pr_review_agent.fetchers.models import FileDiff, PullRequest
+    from pr_review_agent.llm.base import LLMResponse
+    from pr_review_agent.nodes.output import state_to_review
+
+    pr = PullRequest(
+        id="2", title="Add auth endpoint", description="JWT-based login",
+        author="dev", source_branch="feat/auth", target_branch="main",
+        provider="github", url="https://github.com/example/repo/pull/2",
+        files=[
+            FileDiff(
+                path="src/auth.py", status="added",
+                additions=20, deletions=0,
+                diff_text="@@ -0,0 +1,20 @@\n+def login(user, password):\n+    token = jwt.encode({'sub': user}, SECRET)\n+    return token\n",
+                language="python",
+            )
+        ],
+    )
+    fetcher = MagicMock()
+    fetcher.fetch_pr.return_value = pr
+
+    captured_systems: list[str] = []
+
+    analysis_response = json.dumps({"findings": []})
+    critique_response = json.dumps({"results": []})
+    summary_response = "Auth endpoint looks reasonable. Approve with nits."
+    call_count = 0
+
+    async def side_effect(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        captured_systems.append(kwargs.get("system", ""))
+        if call_count <= 4:
+            return LLMResponse(content=analysis_response, model="mock")
+        if call_count == 5:
+            return LLMResponse(content=critique_response, model="mock")
+        return LLMResponse(content=summary_response, model="mock")
+
+    llm = MagicMock()
+    llm.acomplete = AsyncMock(side_effect=side_effect)
+
+    settings = Settings.model_construct(
+        temperature=0.2, max_tokens=2000, retry_attempts=1,
+        parallel=True, enable_self_critique=True,
+        github_pat="", azure_org="", azure_pat="",
+        openai_api_key="", anthropic_api_key="",
+        ollama_base_url="http://localhost:11434",
+        default_provider="github", default_llm="ollama",
+        default_model="llama3.1:8b",
+        max_diff_size_kb=500, default_format="markdown",
+        context_budget_tokens=1500, project_context_path=None,
+    )
+
+    pc = ProjectContext(global_md="## Conventions\nUse bcrypt for password hashing. JWT secret from env only.")
+
+    graph = build_graph(fetcher, llm, settings)
+
+    initial_state = {
+        "pr_url": "https://github.com/example/repo/pull/2",
+        "provider": "github",
+        "project_context": pc,
+        "pull_request": None,
+        "findings": [],
+        "final_findings": None,
+        "summary": None,
+        "errors": [],
+    }
+
+    result = await graph.ainvoke(initial_state)
+    review = state_to_review(result)
+
+    assert review.summary
+    assert not review.errors
+    # Context should have been injected — at least one captured system prompt contains the convention text
+    assert any("bcrypt" in s or "JWT" in s or "project_context" in s for s in captured_systems)

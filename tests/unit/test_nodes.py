@@ -40,6 +40,7 @@ def _make_settings(**kwargs):
     defaults = dict(
         temperature=0.2, max_tokens=2000, retry_attempts=1,
         parallel=True, enable_self_critique=True,
+        context_budget_tokens=1500, project_context_path=None,
     )
     defaults.update(kwargs)
     s = Settings.model_construct(**defaults)
@@ -103,7 +104,7 @@ class TestAnalysisNode:
         llm = self._make_llm(payload)
         settings = _make_settings()
 
-        def build_prompt(title, desc, diff):
+        def build_prompt(title, desc, diff, project_context=""):
             return "sys", "user"
 
         node = make_analysis_node("bug", build_prompt, llm, settings)
@@ -121,7 +122,7 @@ class TestAnalysisNode:
     async def test_no_pr_returns_empty(self):
         from pr_review_agent.nodes.analysis import make_analysis_node
         llm = MagicMock()
-        node = make_analysis_node("bug", lambda *a: ("s", "u"), llm, _make_settings())
+        node = make_analysis_node("bug", lambda *a, **kw: ("s", "u"), llm, _make_settings())
         result = await node({"pull_request": None, "findings": [], "errors": []})
 
         assert result["findings"] == []
@@ -133,7 +134,7 @@ class TestAnalysisNode:
         from pr_review_agent.llm.base import LLMResponse
         llm = MagicMock()
         llm.acomplete = AsyncMock(return_value=LLMResponse(content="not json", model="t"))
-        node = make_analysis_node("security", lambda *a: ("s", "u"), llm, _make_settings(retry_attempts=0))
+        node = make_analysis_node("security", lambda *a, **kw: ("s", "u"), llm, _make_settings(retry_attempts=0))
         result = await node({"pull_request": _make_pr(), "findings": [], "errors": []})
 
         assert result["findings"] == []
@@ -231,3 +232,73 @@ class TestSynthesisNode:
 
         assert result["final_findings"] == []
         assert "No significant" in result["summary"]
+
+
+# ---------------------------------------------------------------------------
+# analysis node — project context injection
+# ---------------------------------------------------------------------------
+
+class TestAnalysisNodeWithContext:
+    def _make_llm(self, content: str) -> MagicMock:
+        from pr_review_agent.llm.base import LLMResponse
+        llm = MagicMock()
+        llm.acomplete = AsyncMock(return_value=LLMResponse(content=content, model="test"))
+        return llm
+
+    @pytest.mark.asyncio
+    async def test_project_context_passed_into_system_prompt(self):
+        from pr_review_agent.context.retriever import ProjectContext
+        from pr_review_agent.nodes.analysis import make_analysis_node
+
+        captured = {}
+
+        async def fake_acomplete(system, user, **kwargs):
+            from pr_review_agent.llm.base import LLMResponse
+            captured["system"] = system
+            return LLMResponse(content='{"findings": []}', model="test")
+
+        llm = MagicMock()
+        llm.acomplete = fake_acomplete
+
+        pc = ProjectContext(global_md="## Conventions\nNever use eval().")
+
+        def build_prompt(title, desc, diff, project_context=""):
+            return f"ROLE{project_context}", "USER"
+
+        node = make_analysis_node("security", build_prompt, llm, _make_settings())
+        await node({
+            "pull_request": _make_pr(),
+            "project_context": pc,
+            "findings": [],
+            "errors": [],
+        })
+
+        assert "eval" in captured["system"]
+
+    @pytest.mark.asyncio
+    async def test_no_project_context_passes_empty_string(self):
+        from pr_review_agent.nodes.analysis import make_analysis_node
+
+        captured = {}
+
+        async def fake_acomplete(system, user, **kwargs):
+            from pr_review_agent.llm.base import LLMResponse
+            captured["system"] = system
+            return LLMResponse(content='{"findings": []}', model="test")
+
+        llm = MagicMock()
+        llm.acomplete = fake_acomplete
+
+        def build_prompt(title, desc, diff, project_context=""):
+            captured["ctx"] = project_context
+            return "ROLE", "USER"
+
+        node = make_analysis_node("bug", build_prompt, llm, _make_settings())
+        await node({
+            "pull_request": _make_pr(),
+            "project_context": None,
+            "findings": [],
+            "errors": [],
+        })
+
+        assert captured["ctx"] == ""

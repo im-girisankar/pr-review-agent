@@ -1,5 +1,7 @@
-_CRITIQUE_SYSTEM = """\
-You are a code review quality checker. Your job is to verify that each finding \
+_CRITIQUE_SYSTEM_HEAD = "You are a code review quality checker."
+
+_CRITIQUE_SYSTEM_TAIL = """\
+ Your job is to verify that each finding \
 is accurately grounded in the diff — not hallucinated or based on code outside \
 the diff.
 
@@ -30,8 +32,10 @@ Diff:
 Verify each finding against the diff.\
 """
 
-_SUMMARY_SYSTEM = """\
-You are a staff engineer writing a concise code review summary. \
+_SUMMARY_SYSTEM_HEAD = "You are a staff engineer writing a concise code review summary."
+
+_SUMMARY_SYSTEM_TAIL = """\
+ \
 Write 2-3 sentences covering: overall quality, the most important issues, \
 and a clear recommendation (approve / approve with nits / request changes).\
 """
@@ -46,8 +50,18 @@ Write the summary.\
 """
 
 
-def build_critique_prompt(findings_json: str, diff: str) -> tuple[str, str]:
-    return _CRITIQUE_SYSTEM, _CRITIQUE_USER_TEMPLATE.format(
+def build_critique_prompt(
+    findings_json: str,
+    diff: str,
+    project_context: str = "",
+) -> tuple[str, str]:
+    ctx_block = (
+        f"\n<project_context>\n{project_context.strip()}\n</project_context>"
+        if project_context.strip()
+        else ""
+    )
+    system = _CRITIQUE_SYSTEM_HEAD + ctx_block + _CRITIQUE_SYSTEM_TAIL
+    return system, _CRITIQUE_USER_TEMPLATE.format(
         findings_json=findings_json,
         diff=diff,
     )
@@ -58,11 +72,18 @@ def build_summary_prompt(
     findings: list,
     total: int,
     critical_high: int,
+    project_context: str = "",
 ) -> tuple[str, str]:
+    ctx_block = (
+        f"\n<project_context>\n{project_context.strip()}\n</project_context>"
+        if project_context.strip()
+        else ""
+    )
+    system = _SUMMARY_SYSTEM_HEAD + ctx_block + _SUMMARY_SYSTEM_TAIL
     finding_list = "\n".join(
         f"- [{f.severity.upper()}] {f.title} ({f.file})" for f in findings[:10]
     )
-    return _SUMMARY_SYSTEM, _SUMMARY_USER_TEMPLATE.format(
+    return system, _SUMMARY_USER_TEMPLATE.format(
         title=title,
         total=total,
         critical_high=critical_high,

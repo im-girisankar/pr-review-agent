@@ -1,7 +1,10 @@
 import asyncio
+import tempfile
+from pathlib import Path
 
 import streamlit as st
 
+from pr_review_agent.context import load_project_context
 from pr_review_agent.core.graph import build_graph
 from pr_review_agent.core.settings import Settings
 from pr_review_agent.fetchers.factory import get_fetcher
@@ -19,13 +22,15 @@ _SEVERITY_COLOR = {
 }
 
 
-def _run_review(url, provider, llm_provider, model, pat):
+def _run_review(url, provider, llm_provider, model, pat, context_path=None):
     settings = Settings.from_yaml()
     if pat:
         if provider == "github":
             settings.github_pat = pat
         else:
             settings.azure_pat = pat
+
+    pc = load_project_context(context_path)
 
     fetcher = get_fetcher(provider, settings)
     llm = get_llm(llm_provider, settings, model_override=model or None)
@@ -34,13 +39,14 @@ def _run_review(url, provider, llm_provider, model, pat):
     initial_state = {
         "pr_url": url,
         "provider": provider,
+        "project_context": pc,
         "pull_request": None,
         "findings": [],
         "final_findings": None,
         "summary": None,
         "errors": [],
     }
-    return asyncio.run(graph.ainvoke(initial_state))
+    return asyncio.run(graph.ainvoke(initial_state)), pc
 
 
 def main():
@@ -62,6 +68,16 @@ def main():
             help="Your PAT is used only for this session and never stored.",
         )
         st.divider()
+        st.subheader("Project Context (optional)")
+        ctx_file = st.file_uploader(
+            "Upload .md or graph.json",
+            type=["md", "json"],
+            help="Provide project conventions and instructions to guide the review. "
+                 "Use a graphify graph.json for large projects.",
+        )
+        if ctx_file:
+            st.caption(f"Loaded: {ctx_file.name} ({ctx_file.size:,} bytes)")
+        st.divider()
         st.caption("Run locally for free with [Ollama](https://ollama.ai)")
 
     url = st.text_input(
@@ -70,13 +86,27 @@ def main():
     )
 
     if st.button("🚀 Review PR", type="primary", disabled=not url):
+        context_path = None
+        if ctx_file:
+            suffix = Path(ctx_file.name).suffix
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp.write(ctx_file.getvalue())
+            tmp.flush()
+            context_path = Path(tmp.name)
+
         with st.spinner("Fetching PR and running analysis passes..."):
             try:
-                result = _run_review(url, provider, llm_provider, model, pat)
+                result, pc = _run_review(url, provider, llm_provider, model, pat, context_path)
                 review = state_to_review(result)
             except Exception as exc:
                 st.error(f"Error: {exc}")
                 return
+
+        if pc:
+            st.caption(
+                f"Context loaded — graph: {'yes' if pc.graph is not None else 'no'}, "
+                f"md: {'yes' if pc.global_md else 'no'}"
+            )
 
         # Summary
         st.subheader("Summary")

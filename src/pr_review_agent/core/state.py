@@ -1,14 +1,20 @@
 from operator import add
-from typing import Annotated, TypedDict
+from typing import TYPE_CHECKING, Annotated, Any, TypedDict
 
 from pr_review_agent.fetchers.models import PullRequest
 from pr_review_agent.output.models import Finding
+
+if TYPE_CHECKING:
+    from pr_review_agent.context.retriever import ProjectContext
 
 
 class ReviewState(TypedDict):
     # Input
     pr_url: str
     provider: str  # "github" | "azure_devops"
+
+    # Optional project context loaded from .md or graphify graph.json
+    project_context: Any  # ProjectContext | None
 
     # Populated by fetch node
     pull_request: PullRequest | None

@@ -1,6 +1,7 @@
 import asyncio
 import io
 import sys
+from pathlib import Path
 
 import click
 import structlog
@@ -18,6 +19,7 @@ structlog.configure(
     logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
 )
 
+from pr_review_agent.context import load_project_context
 from pr_review_agent.core.graph import build_graph
 from pr_review_agent.core.settings import Settings
 from pr_review_agent.fetchers.factory import get_fetcher
@@ -36,6 +38,7 @@ async def _run(
     model: str | None,
     output_format: str,
     pat: str | None,
+    project_context_path: Path | None = None,
 ) -> str:
     settings = Settings.from_yaml()
     if pat:
@@ -44,6 +47,10 @@ async def _run(
         elif provider == "azure_devops":
             settings.azure_pat = pat
 
+    pc = load_project_context(project_context_path or settings.project_context_path)
+    if pc:
+        log.info("project_context_loaded", has_graph=pc.graph is not None, has_md=pc.global_md is not None)
+
     fetcher = get_fetcher(provider, settings)
     llm = get_llm(llm_provider, settings, model_override=model)
     graph = build_graph(fetcher, llm, settings)
@@ -51,6 +58,7 @@ async def _run(
     initial_state = {
         "pr_url": url,
         "provider": provider,
+        "project_context": pc,
         "pull_request": None,
         "findings": [],
         "final_findings": None,
@@ -96,6 +104,13 @@ def main() -> None:
     help="Output format.",
 )
 @click.option("--pat", default=None, help="Personal access token (overrides env var).")
+@click.option(
+    "--project-context",
+    "project_context_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to project context .md file or graphify-out/graph.json.",
+)
 def review(
     url: str,
     provider: str,
@@ -103,10 +118,13 @@ def review(
     model: str | None,
     output_format: str,
     pat: str | None,
+    project_context_path: Path | None,
 ) -> None:
     """Review a pull request at URL."""
     try:
-        output = asyncio.run(_run(url, provider, llm_provider, model, output_format, pat))
+        output = asyncio.run(
+            _run(url, provider, llm_provider, model, output_format, pat, project_context_path)
+        )
         click.echo(output)
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)

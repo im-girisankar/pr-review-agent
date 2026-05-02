@@ -48,7 +48,7 @@ def _parse_findings(raw: str, expected_category: str) -> list[Finding]:
 
 def make_analysis_node(
     category: str,
-    build_prompt: Callable[[str, str, str], tuple[str, str]],
+    build_prompt: Callable[..., tuple[str, str]],
     llm: LLMProvider,
     settings: Settings,
 ) -> Callable:
@@ -57,8 +57,14 @@ def make_analysis_node(
         if pr is None:
             return {"findings": [], "errors": [f"{category}: skipped — PR fetch failed"]}
 
+        # Phase 2: chunk per-file here and run map-reduce so big PRs fit on small models.
         diff = format_diff(pr)
-        system, user = build_prompt(pr.title, pr.description, diff)
+
+        ctx = state.get("project_context")
+        project_context = (
+            ctx.retrieve(category, settings.context_budget_tokens) if ctx else ""
+        )
+        system, user = build_prompt(pr.title, pr.description, diff, project_context=project_context)
 
         for attempt in range(settings.retry_attempts + 1):
             try:

@@ -1,0 +1,32 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {"id": "auth_module", "label": "Authentication Module", "file_type": "code", "source_file": "src/auth.py", "source_location": null},
+    {"id": "token_validator", "label": "Token Permission Validator", "file_type": "code", "source_file": "src/auth.py", "source_location": null},
+    {"id": "permission_check", "label": "Role Permission Check", "file_type": "code", "source_file": "src/middleware.py", "source_location": null},
+    {"id": "null_handler", "label": "Null Exception Handler", "file_type": "code", "source_file": "src/utils.py", "source_location": null},
+    {"id": "resource_cleanup", "label": "Resource Leak Cleanup", "file_type": "code", "source_file": "src/utils.py", "source_location": null},
+    {"id": "boundary_check", "label": "Boundary Validation Helper", "file_type": "code", "source_file": "src/validators.py", "source_location": null},
+    {"id": "query_cache", "label": "Redis Query Cache Layer", "file_type": "code", "source_file": "src/cache.py", "source_location": null},
+    {"id": "db_pool", "label": "Database Connection Pool", "file_type": "code", "source_file": "src/db.py", "source_location": null},
+    {"id": "latency_monitor", "label": "Latency Memory Monitor", "file_type": "code", "source_file": "src/monitoring.py", "source_location": null},
+    {"id": "test_fixtures", "label": "Test Fixture Factory", "file_type": "code", "source_file": "tests/conftest.py", "source_location": null},
+    {"id": "mock_provider", "label": "Mock Coverage Provider", "file_type": "code", "source_file": "tests/helpers.py", "source_location": null},
+    {"id": "architecture_overview", "label": "System Architecture Overview", "file_type": "document", "source_file": "docs/architecture.md", "source_location": null},
+    {"id": "feature_registry", "label": "Feature Module Registry", "file_type": "code", "source_file": "src/features.py", "source_location": null}
+  ],
+  "links": [
+    {"source": "auth_module", "target": "token_validator", "relation": "uses", "confidence": "EXTRACTED", "confidence_score": 1.0, "weight": 1.0},
+    {"source": "auth_module", "target": "permission_check", "relation": "calls", "confidence": "EXTRACTED", "confidence_score": 1.0, "weight": 1.0},
+    {"source": "null_handler", "target": "resource_cleanup", "relation": "implements", "confidence": "EXTRACTED", "confidence_score": 1.0, "weight": 1.0},
+    {"source": "null_handler", "target": "boundary_check", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "weight": 1.0},
+    {"source": "query_cache", "target": "db_pool", "relation": "wraps", "confidence": "EXTRACTED", "confidence_score": 1.0, "weight": 1.0},
+    {"source": "query_cache", "target": "latency_monitor", "relation": "reports_to", "confidence": "INFERRED", "confidence_score": 0.8, "weight": 0.8},
+    {"source": "test_fixtures", "target": "mock_provider", "relation": "uses", "confidence": "EXTRACTED", "confidence_score": 1.0, "weight": 1.0},
+    {"source": "architecture_overview", "target": "auth_module", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "weight": 1.0},
+    {"source": "architecture_overview", "target": "query_cache", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "weight": 1.0},
+    {"source": "feature_registry", "target": "auth_module", "relation": "configures", "confidence": "INFERRED", "confidence_score": 0.75, "weight": 0.75}
+  ]
+}
