@@ -159,10 +159,13 @@ class AzureDevOpsFetcher(PRFetcher):
         source_lines = source_content.splitlines(keepends=True)
         target_lines = target_content.splitlines(keepends=True)
 
+        # `target` is the base branch (before the change), `source` is the PR
+        # branch (after). unified_diff treats the first arg as "before" and
+        # the second as "after", so target must come first.
         diff_lines = list(
             difflib.unified_diff(
-                source_lines,
                 target_lines,
+                source_lines,
                 fromfile=f"a{path}",
                 tofile=f"b{path}",
             )
