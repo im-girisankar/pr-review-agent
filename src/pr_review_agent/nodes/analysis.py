@@ -64,9 +64,16 @@ def make_analysis_node(
     settings: Settings,
 ) -> Callable:
     async def node(state: ReviewState) -> dict:
+        # Resume support: if this pass already succeeded in a previous run,
+        # skip it. Returning {} contributes nothing to the reducers.
+        if category in state.get("completed_passes", []):
+            log.info("analysis_skipped_already_done", category=category)
+            return {}
+
         pr = state.get("pull_request")
         if pr is None:
-            return {"findings": [], "errors": [f"{category}: skipped — PR fetch failed"]}
+            # Fetch failed; synthesis will detect and halt — don't waste an LLM call.
+            return {}
 
         # Phase 2: chunk per-file here and run map-reduce so big PRs fit on small models.
         diff = format_diff(pr)
@@ -77,6 +84,8 @@ def make_analysis_node(
         )
         system, user = build_prompt(pr.title, pr.description, diff, project_context=project_context)
 
+        last_preview = ""
+        last_model = ""
         for attempt in range(settings.retry_attempts + 1):
             try:
                 resp = await llm.acomplete(
@@ -85,18 +94,47 @@ def make_analysis_node(
                     json_mode=True,
                     temperature=settings.temperature,
                 )
+                last_preview = (resp.content or "")[:500]
+                last_model = resp.model
                 findings = _parse_findings(resp.content, category)
                 log.info("analysis_done", category=category, count=len(findings))
-                return {"findings": findings, "errors": []}
+                return {"findings": findings, "completed_passes": [category]}
             except json.JSONDecodeError as exc:
                 if attempt == settings.retry_attempts:
-                    log.error("analysis_json_failed", category=category, error=str(exc))
-                    return {"findings": [], "errors": [f"{category}: malformed JSON response"]}
+                    log.error(
+                        "analysis_json_failed",
+                        category=category,
+                        error=str(exc),
+                        response_preview=last_preview,
+                        model=last_model,
+                    )
+                    return {"failed_passes": [{
+                        "category": category,
+                        "error": f"Malformed JSON after {attempt + 1} attempt(s): {exc}",
+                        "response_preview": last_preview,
+                        "attempt": attempt,
+                        "kind": "json_decode",
+                        "model": last_model,
+                    }]}
                 log.warning("analysis_retry", category=category, attempt=attempt)
             except Exception as exc:
                 log.error("analysis_failed", category=category, error=str(exc))
-                return {"findings": [], "errors": [f"{category}: {exc}"]}
+                return {"failed_passes": [{
+                    "category": category,
+                    "error": str(exc),
+                    "response_preview": last_preview,
+                    "attempt": attempt,
+                    "kind": type(exc).__name__,
+                    "model": last_model,
+                }]}
 
-        return {"findings": [], "errors": [f"{category}: all retry attempts exhausted"]}
+        return {"failed_passes": [{
+            "category": category,
+            "error": "all retry attempts exhausted",
+            "response_preview": last_preview,
+            "attempt": settings.retry_attempts,
+            "kind": "exhausted",
+            "model": last_model,
+        }]}
 
     return node

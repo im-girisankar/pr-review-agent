@@ -125,11 +125,11 @@ class TestAnalysisNode:
         node = make_analysis_node("bug", lambda *a, **kw: ("s", "u"), llm, _make_settings())
         result = await node({"pull_request": None, "findings": [], "errors": []})
 
-        assert result["findings"] == []
-        assert result["errors"]
+        # No PR — node emits nothing; synthesis handles the halt.
+        assert result == {}
 
     @pytest.mark.asyncio
-    async def test_malformed_json_captured_to_errors(self):
+    async def test_malformed_json_recorded_as_failed_pass(self):
         from pr_review_agent.nodes.analysis import make_analysis_node
         from pr_review_agent.llm.base import LLMResponse
         llm = MagicMock()
@@ -137,8 +137,43 @@ class TestAnalysisNode:
         node = make_analysis_node("security", lambda *a, **kw: ("s", "u"), llm, _make_settings(retry_attempts=0))
         result = await node({"pull_request": _make_pr(), "findings": [], "errors": []})
 
+        assert "failed_passes" in result
+        assert result["failed_passes"][0]["category"] == "security"
+        assert result["failed_passes"][0]["kind"] == "json_decode"
+        assert result["failed_passes"][0]["response_preview"] == "not json"
+
+    @pytest.mark.asyncio
+    async def test_skipped_when_already_completed(self):
+        from pr_review_agent.nodes.analysis import make_analysis_node
+        llm = MagicMock()
+        # acomplete should NEVER be called when the pass is already complete.
+        llm.acomplete = AsyncMock(side_effect=AssertionError("LLM should not be called"))
+        node = make_analysis_node("bug", lambda *a, **kw: ("s", "u"), llm, _make_settings())
+        result = await node({
+            "pull_request": _make_pr(),
+            "findings": [],
+            "errors": [],
+            "completed_passes": ["bug"],
+        })
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_success_records_completed_pass(self):
+        from pr_review_agent.nodes.analysis import make_analysis_node
+        from pr_review_agent.llm.base import LLMResponse
+        payload = json.dumps({"findings": []})
+        llm = MagicMock()
+        llm.acomplete = AsyncMock(return_value=LLMResponse(content=payload, model="t"))
+        node = make_analysis_node("performance", lambda *a, **kw: ("s", "u"), llm, _make_settings())
+        result = await node({
+            "pull_request": _make_pr(),
+            "findings": [],
+            "errors": [],
+        })
+
+        assert result["completed_passes"] == ["performance"]
         assert result["findings"] == []
-        assert result["errors"]
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +254,41 @@ class TestSynthesisNode:
 
         assert len(result["final_findings"]) == 1
         assert result["summary"] == "One bug found."
+
+    @pytest.mark.asyncio
+    async def test_synthesis_halts_on_failed_passes(self):
+        from pr_review_agent.nodes.synthesis import make_synthesis_node
+        llm = MagicMock()
+        llm.acomplete = AsyncMock(side_effect=AssertionError("LLM should not be called when halting"))
+
+        node = make_synthesis_node(llm, _make_settings())
+        result = await node({
+            "findings": [_make_finding()],
+            "pull_request": _make_pr(),
+            "failed_passes": [{"category": "security", "error": "boom", "kind": "json_decode"}],
+            "errors": [],
+        })
+
+        assert result["final_findings"] is None
+        assert "halted" in (result["summary"] or "").lower()
+        assert result["errors"]
+
+    @pytest.mark.asyncio
+    async def test_synthesis_halts_when_pr_missing(self):
+        from pr_review_agent.nodes.synthesis import make_synthesis_node
+        llm = MagicMock()
+        llm.acomplete = AsyncMock(side_effect=AssertionError("LLM should not be called when halting"))
+
+        node = make_synthesis_node(llm, _make_settings())
+        result = await node({
+            "findings": [],
+            "pull_request": None,
+            "failed_passes": [],
+            "errors": ["fetch failed"],
+        })
+
+        assert result["final_findings"] is None
+        assert "halted" in (result["summary"] or "").lower()
 
     @pytest.mark.asyncio
     async def test_synthesis_no_findings_returns_empty(self):

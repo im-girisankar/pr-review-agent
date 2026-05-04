@@ -28,3 +28,12 @@ class ReviewState(TypedDict):
 
     # add reducer so parallel branches can safely write errors without overwriting each other
     errors: Annotated[list[str], add]
+
+    # Pass-level completion tracking — used by stop-and-resume.
+    # On resume, analysis nodes whose name is in completed_passes are skipped.
+    completed_passes: Annotated[list[str], add]
+
+    # Each entry: {"category", "error", "response_preview", "attempt", "kind"}.
+    # If non-empty after analysis, synthesis short-circuits without running so the
+    # caller can decide whether to resume.
+    failed_passes: Annotated[list[dict], add]

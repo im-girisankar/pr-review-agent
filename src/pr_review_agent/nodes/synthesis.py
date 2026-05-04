@@ -125,6 +125,27 @@ def make_synthesis_node(llm: LLMProvider, settings: Settings) -> Callable:
     async def synthesis(state: ReviewState) -> dict:
         raw_findings: list[Finding] = state.get("findings", [])
         pr = state.get("pull_request")
+        failed_passes = state.get("failed_passes", [])
+
+        # Stop-and-report: if any analysis pass failed, halt before synthesis so
+        # the caller can show the failure and offer to resume. Successful
+        # passes' findings are preserved in state for the resume path.
+        if failed_passes:
+            failed_names = ", ".join(p.get("category", "?") for p in failed_passes)
+            log.warning("synthesis_halted_failed_passes", count=len(failed_passes))
+            return {
+                "final_findings": None,
+                "summary": f"Run halted — {len(failed_passes)} pass(es) failed: {failed_names}",
+                "errors": [f"halted: {failed_names}"],
+            }
+
+        if pr is None:
+            log.warning("synthesis_halted_no_pr")
+            return {
+                "final_findings": None,
+                "summary": "Run halted — PR fetch failed.",
+                "errors": ["halted: PR fetch failed"],
+            }
 
         log.info("synthesis_start", raw_findings=len(raw_findings))
 
