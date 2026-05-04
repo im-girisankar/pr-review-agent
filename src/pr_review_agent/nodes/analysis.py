@@ -14,6 +14,16 @@ log = structlog.get_logger(__name__)
 
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
 
+# Analysis pass names don't always match the Finding.category Literal values.
+# Map them at the boundary so pass naming (used in graph, retriever, logs) stays
+# decoupled from the canonical finding category.
+_PASS_TO_CATEGORY = {
+    "bug_detection": "bug",
+    "security": "security",
+    "performance": "performance",
+    "test_coverage": "test_coverage",
+}
+
 
 def format_diff(pr: PullRequest) -> str:
     """Format all file diffs as a single annotated string for LLM consumption."""
@@ -37,8 +47,9 @@ def _parse_findings(raw: str, expected_category: str) -> list[Finding]:
     """
     data = json.loads(raw)
     findings = []
+    finding_category = _PASS_TO_CATEGORY.get(expected_category, expected_category)
     for item in data.get("findings", []):
-        item["category"] = expected_category  # enforce correct category
+        item["category"] = finding_category  # enforce correct category
         try:
             findings.append(Finding(**item))
         except (ValidationError, TypeError):

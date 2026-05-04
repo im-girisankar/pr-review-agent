@@ -55,23 +55,39 @@ async def _self_critique(
         findings_json, diff, project_context=project_context
     )
 
-    try:
-        resp = await llm.acomplete(
-            system=system,
-            user=user,
-            json_mode=True,
-            temperature=0.1,
-        )
-        data = json.loads(resp.content)
-        grounded = {r["index"] for r in data.get("results", []) if r.get("grounded", True)}
-        verified = [f for i, f in enumerate(findings) if i in grounded]
-        dropped = len(findings) - len(verified)
-        if dropped:
-            log.info("self_critique_dropped", count=dropped)
-        return verified
-    except Exception as exc:
-        log.error("self_critique_failed", error=str(exc))
-        return findings  # fail open — return all findings rather than dropping everything
+    last_content: str | None = None
+    for attempt in range(settings.retry_attempts + 1):
+        try:
+            resp = await llm.acomplete(
+                system=system,
+                user=user,
+                json_mode=True,
+                temperature=0.1,
+            )
+            last_content = resp.content
+            data = json.loads(resp.content)
+            grounded = {r["index"] for r in data.get("results", []) if r.get("grounded", True)}
+            verified = [f for i, f in enumerate(findings) if i in grounded]
+            dropped = len(findings) - len(verified)
+            if dropped:
+                log.info("self_critique_dropped", count=dropped)
+            return verified
+        except json.JSONDecodeError as exc:
+            preview = (last_content or "")[:200]
+            if attempt == settings.retry_attempts:
+                log.error(
+                    "self_critique_failed",
+                    error=str(exc),
+                    response_preview=preview,
+                    response_len=len(last_content or ""),
+                )
+                return findings  # fail open
+            log.warning("self_critique_retry", attempt=attempt, response_preview=preview)
+        except Exception as exc:
+            log.error("self_critique_failed", error=str(exc))
+            return findings  # fail open — return all findings rather than dropping everything
+
+    return findings  # fail open after exhausting retries
 
 
 async def _generate_summary(

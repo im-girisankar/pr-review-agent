@@ -58,9 +58,16 @@ def main():
         st.header("Configuration")
         provider = st.selectbox("PR Source", ["github", "azure_devops"])
         llm_provider = st.selectbox("LLM Backend", ["groq", "ollama", "openai", "anthropic"])
+        _model_defaults = {
+            "ollama": "qwen3-coder-next:cloud",
+            "groq": "llama-3.3-70b-versatile",
+            "openai": "gpt-4o",
+            "anthropic": "claude-sonnet-4-5",
+        }
         model = st.text_input(
             "Model",
-            placeholder="llama3.1:8b / gpt-4o / claude-sonnet-4-6",
+            value=_model_defaults.get(llm_provider, ""),
+            placeholder="llama3.1:8b / gpt-4o / claude-sonnet-4-5",
         )
         pat = st.text_input(
             "Personal Access Token",
