@@ -1,6 +1,7 @@
 import base64
 import difflib
 import re
+import time
 
 import requests
 import structlog
@@ -105,25 +106,47 @@ class AzureDevOpsFetcher(PRFetcher):
         return resp.json()
 
     def _get_file_content(self, base_url: str, path: str, sha: str) -> str | None:
-        try:
-            resp = requests.get(
-                f"{base_url}/items",
-                headers=self._headers,
-                params={
-                    "path": path,
-                    "versionDescriptor.versionType": "commit",
-                    "versionDescriptor.version": sha,
-                    "api-version": _API_VERSION,
-                },
-                timeout=30,
-            )
-            if resp.status_code == 404:
-                return None
-            resp.raise_for_status()
-            return resp.text
-        except Exception as exc:
-            log.warning("azure_file_fetch_failed", path=path, error=str(exc))
-            return None
+        url = f"{base_url}/items"
+        params = {
+            "path": path,
+            "versionDescriptor.versionType": "commit",
+            "versionDescriptor.version": sha,
+            "api-version": _API_VERSION,
+        }
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                resp = requests.get(url, headers=self._headers, params=params, timeout=30)
+                if resp.status_code == 404:
+                    return None
+                if resp.status_code >= 500:
+                    # Transient server error — retry with backoff
+                    raise requests.HTTPError(
+                        f"{resp.status_code} Server Error: {resp.reason} for url: {resp.url}",
+                        response=resp,
+                    )
+                resp.raise_for_status()
+                return resp.text
+            except requests.HTTPError as exc:
+                last_exc = exc
+                if exc.response is not None and exc.response.status_code < 500:
+                    break  # Client error (4xx) — no point retrying
+                if attempt < 2:
+                    delay = 2 ** attempt  # 1s, 2s
+                    log.warning(
+                        "azure_file_fetch_retry",
+                        path=path,
+                        attempt=attempt + 1,
+                        delay=delay,
+                        error=str(exc),
+                    )
+                    time.sleep(delay)
+            except Exception as exc:
+                last_exc = exc
+                break  # Non-HTTP error (timeout, DNS) — log and give up
+
+        log.warning("azure_file_fetch_failed", path=path, error=str(last_exc))
+        return None
 
     def _get_latest_iteration_id(self, base_url: str, pr_id: int) -> int:
         data = self._get(f"{base_url}/pullrequests/{pr_id}/iterations")
