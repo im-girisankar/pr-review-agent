@@ -22,7 +22,13 @@ _SEVERITY_COLOR = {
 }
 
 # Order matters: drives progress bar layout.
-_NODE_LABELS = {
+# Chunked mode uses "analyze"; full mode uses the 4 category nodes.
+_NODE_LABELS_CHUNKED = {
+    "fetch": "Fetch PR",
+    "analyze": "Analyze files",
+    "synthesis": "Synthesis",
+}
+_NODE_LABELS_FULL = {
     "fetch": "Fetch PR",
     "bug_detection": "Bug detection",
     "security": "Security",
@@ -30,7 +36,8 @@ _NODE_LABELS = {
     "test_coverage": "Test coverage",
     "synthesis": "Synthesis",
 }
-_ANALYSIS_NODES = ("bug_detection", "security", "performance", "test_coverage")
+_ANALYSIS_NODES_CHUNKED = ("analyze",)
+_ANALYSIS_NODES_FULL = ("bug_detection", "security", "performance", "test_coverage")
 
 _OLLAMA_MODELS = [
     "qwen3-coder-next:cloud",
@@ -53,7 +60,7 @@ _MODEL_DEFAULTS = {
 # ---------------------------------------------------------------------------
 
 
-async def _run_with_progress(graph, initial_state, progress_widgets):
+async def _run_with_progress(graph, initial_state, progress_widgets, node_labels, analysis_nodes):
     """
     Drive the graph via astream and update progress bars in real time.
 
@@ -75,25 +82,24 @@ async def _run_with_progress(graph, initial_state, progress_widgets):
                     accumulated[k] = v
 
             # Update progress.
-            label = _NODE_LABELS.get(node_name, node_name)
+            label = node_labels.get(node_name, node_name)
             ph = progress_widgets.get(node_name)
             if ph is not None:
                 ph.progress(1.0, text=f"✓ {label}")
 
             if node_name == "fetch":
                 fetch_seen = True
-                # Once fetch is in, the four analysis passes are running in parallel.
-                for n in _ANALYSIS_NODES:
+                for n in analysis_nodes:
                     if n not in analysis_done:
                         w = progress_widgets.get(n)
                         if w is not None:
-                            w.progress(0.5, text=f"⏳ {_NODE_LABELS[n]} (running…)")
-            elif node_name in _ANALYSIS_NODES:
+                            w.progress(0.5, text=f"⏳ {node_labels[n]} (running…)")
+            elif node_name in analysis_nodes:
                 analysis_done.add(node_name)
-                if fetch_seen and len(analysis_done) == len(_ANALYSIS_NODES):
+                if fetch_seen and len(analysis_done) == len(analysis_nodes):
                     w = progress_widgets.get("synthesis")
                     if w is not None:
-                        w.progress(0.5, text=f"⏳ {_NODE_LABELS['synthesis']} (running…)")
+                        w.progress(0.5, text=f"⏳ {node_labels['synthesis']} (running…)")
 
     return accumulated
 
@@ -108,7 +114,7 @@ def _build_graph_for_run(provider, llm_provider, model, pat, context_path):
     pc = load_project_context(context_path)
     fetcher = get_fetcher(provider, settings)
     llm = get_llm(llm_provider, settings, model_override=model or None)
-    return build_graph(fetcher, llm, settings), pc
+    return build_graph(fetcher, llm, settings), pc, settings.analysis_mode
 
 
 def _fresh_initial_state(url, provider, pc):
@@ -147,12 +153,12 @@ def _resume_initial_state(partial, pc):
 # ---------------------------------------------------------------------------
 
 
-def _render_progress_widgets():
+def _render_progress_widgets(node_labels: dict) -> dict:
     """Build a status container with one progress bar per pipeline node."""
     container = st.container()
     with container:
         widgets = {}
-        for node, label in _NODE_LABELS.items():
+        for node, label in node_labels.items():
             ph = st.empty()
             ph.progress(0, text=f"⏳ {label}")
             widgets[node] = ph
@@ -254,15 +260,18 @@ def _execute_run(initial_state, run_args):
     """Build the graph, drive it through the streaming progress UI, and store the result."""
     provider, llm_provider, model, pat, context_path = run_args
     try:
-        graph, _ = _build_graph_for_run(provider, llm_provider, model, pat, context_path)
+        graph, _, analysis_mode = _build_graph_for_run(provider, llm_provider, model, pat, context_path)
     except Exception as exc:
         st.error(f"Failed to build pipeline: {exc}")
         return
 
+    node_labels = _NODE_LABELS_CHUNKED if analysis_mode == "chunked" else _NODE_LABELS_FULL
+    analysis_nodes = _ANALYSIS_NODES_CHUNKED if analysis_mode == "chunked" else _ANALYSIS_NODES_FULL
+
     with st.status("Running review", expanded=True) as status:
-        widgets = _render_progress_widgets()
+        widgets = _render_progress_widgets(node_labels)
         try:
-            final = asyncio.run(_run_with_progress(graph, initial_state, widgets))
+            final = asyncio.run(_run_with_progress(graph, initial_state, widgets, node_labels, analysis_nodes))
         except Exception as exc:
             status.update(label=f"Pipeline crashed: {exc}", state="error")
             st.error(f"Pipeline crashed: {exc}")
@@ -341,7 +350,7 @@ def main():
         if col_a.button("🔁 Resume failed passes", type="primary"):
             run_args = st.session_state["run_args"]
             _, _, _, _, context_path = run_args
-            _, pc = _build_graph_for_run(*run_args)
+            _, pc, _ = _build_graph_for_run(*run_args)
             _execute_run(_resume_initial_state(partial, pc), run_args)
             st.rerun()
         if col_b.button("🗑️ Discard halted run"):
@@ -368,7 +377,7 @@ def main():
 
             run_args = (provider, llm_provider, model, pat, context_path)
             try:
-                _, pc = _build_graph_for_run(*run_args)
+                _, pc, _ = _build_graph_for_run(*run_args)
             except Exception as exc:
                 st.error(f"Failed to load configuration: {exc}")
                 return

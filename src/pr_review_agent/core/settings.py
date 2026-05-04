@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     default_format: str = "markdown"
     project_context_path: Path | None = None
     context_budget_tokens: int = 1500
+    # "chunked": one LLM call per file, all categories — works with any model size
+    # "full": 4 passes on the whole diff — better cross-file reasoning, needs large context
+    analysis_mode: str = "chunked"
 
     @classmethod
     def from_yaml(cls, yaml_path: Path = Path("config.yaml")) -> "Settings":
@@ -51,6 +54,7 @@ class Settings(BaseSettings):
                 "enable_self_critique": raw.get("synthesis", {}).get("enable_self_critique", True),
                 "default_format": raw.get("output", {}).get("default_format", "markdown"),
                 "context_budget_tokens": ctx_cfg.get("budget_tokens", 1500),
+                "analysis_mode": raw.get("analysis", {}).get("mode", "chunked"),
                 **({"project_context_path": Path(ctx_path)} if ctx_path else {}),
             }
         return cls(**overrides)

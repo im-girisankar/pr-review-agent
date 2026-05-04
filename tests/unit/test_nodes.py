@@ -384,3 +384,52 @@ class TestAnalysisNodeWithContext:
         })
 
         assert captured["ctx"] == ""
+
+
+# ---------------------------------------------------------------------------
+# file analysis node (chunked mode)
+# ---------------------------------------------------------------------------
+
+class TestFileAnalysisNode:
+    @pytest.mark.asyncio
+    async def test_returns_findings_for_all_files(self):
+        from pr_review_agent.nodes.file_analysis import make_file_analysis_node
+        from pr_review_agent.llm.base import LLMResponse
+        payload = json.dumps({"findings": [
+            {
+                "category": "bug", "severity": "high",
+                "file": "src/main.py", "line_start": 5, "line_end": 7,
+                "title": "Null deref", "description": "obj may be None",
+                "suggestion": "Check for None",
+            }
+        ]})
+        llm = MagicMock()
+        llm.acomplete = AsyncMock(return_value=MagicMock(content=payload, model="test"))
+        node = make_file_analysis_node(llm, _make_settings())
+        result = await node({"pull_request": _make_pr(), "findings": [], "errors": []})
+        assert len(result["findings"]) == 1
+        assert result["completed_passes"] == ["analyze"]
+
+    @pytest.mark.asyncio
+    async def test_skips_when_already_completed(self):
+        from pr_review_agent.nodes.file_analysis import make_file_analysis_node
+        llm = MagicMock()
+        llm.acomplete = AsyncMock(side_effect=AssertionError("should not be called"))
+        node = make_file_analysis_node(llm, _make_settings())
+        result = await node({
+            "pull_request": _make_pr(), "findings": [], "errors": [],
+            "completed_passes": ["analyze"],
+        })
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_fenced_json_accepted(self):
+        from pr_review_agent.nodes.file_analysis import make_file_analysis_node
+        from pr_review_agent.llm.base import LLMResponse
+        fenced = '```json\n{"findings": []}\n```'
+        llm = MagicMock()
+        llm.acomplete = AsyncMock(return_value=MagicMock(content=fenced, model="test"))
+        node = make_file_analysis_node(llm, _make_settings())
+        result = await node({"pull_request": _make_pr(), "findings": [], "errors": []})
+        assert result.get("failed_passes") is None
+        assert result["findings"] == []
