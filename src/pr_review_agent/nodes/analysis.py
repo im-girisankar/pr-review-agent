@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Callable
 
 import structlog
@@ -39,13 +40,23 @@ def format_diff(pr: PullRequest) -> str:
     return "\n".join(parts)
 
 
+def _strip_json_fences(raw: str) -> str:
+    """Strip markdown code fences that some models wrap around JSON output."""
+    s = raw.strip()
+    # Remove opening ```json or ``` fence
+    s = re.sub(r'^```(?:json)?\s*\n?', '', s)
+    # Remove closing ``` fence
+    s = re.sub(r'\n?```\s*$', '', s)
+    return s.strip()
+
+
 def _parse_findings(raw: str, expected_category: str) -> list[Finding]:
     """
     Parse LLM JSON output into Finding objects.
     Retries are handled at the call site; this raises on failure so the
     caller can decide whether to retry or swallow the error.
     """
-    data = json.loads(raw)
+    data = json.loads(_strip_json_fences(raw))
     findings = []
     finding_category = _PASS_TO_CATEGORY.get(expected_category, expected_category)
     for item in data.get("findings", []):

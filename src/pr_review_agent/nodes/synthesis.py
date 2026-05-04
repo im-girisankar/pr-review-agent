@@ -7,7 +7,7 @@ from pr_review_agent.core.settings import Settings
 from pr_review_agent.core.state import ReviewState
 from pr_review_agent.llm.base import LLMProvider
 from pr_review_agent.llm.prompts import synthesis as synthesis_prompts
-from pr_review_agent.nodes.analysis import format_diff
+from pr_review_agent.nodes.analysis import format_diff, _strip_json_fences
 from pr_review_agent.output.models import Finding
 
 log = structlog.get_logger(__name__)
@@ -65,7 +65,7 @@ async def _self_critique(
                 temperature=0.1,
             )
             last_content = resp.content
-            data = json.loads(resp.content)
+            data = json.loads(_strip_json_fences(resp.content))
             grounded = {r["index"] for r in data.get("results", []) if r.get("grounded", True)}
             verified = [f for i, f in enumerate(findings) if i in grounded]
             dropped = len(findings) - len(verified)

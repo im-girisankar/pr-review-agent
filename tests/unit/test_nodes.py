@@ -129,6 +129,18 @@ class TestAnalysisNode:
         assert result == {}
 
     @pytest.mark.asyncio
+    async def test_fenced_json_parsed_successfully(self):
+        from pr_review_agent.nodes.analysis import make_analysis_node
+        from pr_review_agent.llm.base import LLMResponse
+        fenced = '```json\n{"findings": []}\n```'
+        llm = MagicMock()
+        llm.acomplete = AsyncMock(return_value=LLMResponse(content=fenced, model="t"))
+        node = make_analysis_node("bug", lambda *a, **kw: ("s", "u"), llm, _make_settings(retry_attempts=0))
+        result = await node({"pull_request": _make_pr(), "findings": [], "errors": []})
+        assert result.get("failed_passes") is None
+        assert result["findings"] == []
+
+    @pytest.mark.asyncio
     async def test_malformed_json_recorded_as_failed_pass(self):
         from pr_review_agent.nodes.analysis import make_analysis_node
         from pr_review_agent.llm.base import LLMResponse
