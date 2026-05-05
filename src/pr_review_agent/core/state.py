@@ -13,12 +13,12 @@ class ReviewState(TypedDict):
     # Populated by fetch node
     pull_request: PullRequest | None
 
-    # Populated by analysis nodes — add reducer enables parallel concatenation
+    # Populated by analysis nodes — add reducer merges results from parallel branches
     findings: Annotated[list[Finding], add]
 
     # Populated by synthesis node
     final_findings: list[Finding] | None
     summary: str | None
 
-    # Metadata
-    errors: list[str]
+    # add reducer so parallel branches can safely write errors without overwriting each other
+    errors: Annotated[list[str], add]
