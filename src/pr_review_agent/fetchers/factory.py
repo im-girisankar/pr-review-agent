@@ -1,14 +1,15 @@
+from pr_review_agent.core.settings import Settings
+
 from .base import PRFetcher
 from .github import GitHubFetcher
 
 
-def get_fetcher(provider: str, settings: object) -> PRFetcher:
+def get_fetcher(provider: str, settings: Settings) -> PRFetcher:
     match provider:
         case "github":
-            from pr_review_agent.core.settings import Settings
-            assert isinstance(settings, Settings)
             return GitHubFetcher(pat=settings.github_pat)
         case "azure_devops":
-            raise NotImplementedError("AzureDevOpsFetcher not yet implemented")
+            from .azure_devops import AzureDevOpsFetcher
+            return AzureDevOpsFetcher(org=settings.azure_org, pat=settings.azure_pat)
         case _:
             raise ValueError(f"Unknown provider: {provider}")
