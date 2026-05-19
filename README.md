@@ -131,15 +131,15 @@ Same pattern — one file in `src/pr_review_agent/llm/`, one case in `llm/factor
 | Phase | Description | Status |
 |---|---|---|
 | 1 | Project skeleton + abstractions | ✅ Done |
-| 2 | GitHub fetcher | 🔄 In progress |
-| 3 | LLM providers (OpenAI, Anthropic, Ollama) | ⏳ Planned |
-| 4 | Single analysis node + LangGraph wiring | ⏳ Planned |
-| 5 | All four passes in parallel | ⏳ Planned |
-| 6 | Synthesis + self-critique | ⏳ Planned |
-| 7 | Output formatters + CLI | ⏳ Planned |
-| 8 | Azure DevOps fetcher | ⏳ Planned |
-| 9 | Streamlit UI | ⏳ Planned |
-| 10 | Polish + deploy | ⏳ Planned |
+| 2 | GitHub fetcher | ✅ Done |
+| 3 | LLM providers (OpenAI, Anthropic, Ollama) | ✅ Done |
+| 4 | Single analysis node + LangGraph wiring | ✅ Done |
+| 5 | All four passes in parallel | ✅ Done |
+| 6 | Synthesis + self-critique | ✅ Done |
+| 7 | Output formatters + CLI | ✅ Done |
+| 8 | Azure DevOps fetcher | ✅ Done |
+| 9 | Streamlit UI | ✅ Done |
+| 10 | Polish + deploy | ✅ Done |
 
 ## License
 
